@@ -4,11 +4,11 @@ $homeassistant_host = "homeassistant"
 
 $homeassistantAutoDiscoveryPrefix = "homeassistant"
 $homeassistantComponent = "binary_sensor"
-$homeassistantObjectId = "private_laptop_activity"
+$homeassistantObjectId = "work_laptop_activity"
 $device_class = "motion"
-$sensorUniqueId = "ta6Qv7"
+$sensorUniqueId = "f3frQH"
 $state_topic = "$homeassistantAutoDiscoveryPrefix/$homeassistantComponent/$homeassistantObjectId/state"
-$deviceId = "4cgDJu"
+$deviceId = "jt6Qmn"
 $signatures = @'
 [DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)] 
 public static extern short GetAsyncKeyState(int virtualKeyCode); 
@@ -38,11 +38,12 @@ class MQTTClient {
     [string]$password
 
     [void] publish([string]$topic, [string]$payload) {
-        mqtt-cli.exe  pub -t $topic, -m $payload -h $this.mqttHost -u $this.user -pw $this.password
+        $clientCall = "mqtt-cli pub -h {0} -u {1} -pw {2} -t ""{3}"" -m '{4}'" -f $this.mqttHost,$this.user, $this.password, $topic, $payload
+        Invoke-Expression $clientCall
     }
 
     [void] publish([string]$topic, [boolean]$payload) {
-        mqtt-cli.exe  pub -t $topic, -m $payload -h $this.mqttHost -u $this.user -pw $this.password
+        mqtt-cli pub -t $topic, -m $payload -h $this.mqttHost -u $this.user -pw $this.password
     }
 }
 
@@ -79,7 +80,7 @@ if ($register) {
         device       = $device_info
         off_delay    = 10
     }
-    $configurePayload = (ConvertTo-Json $homeassistant_auto_configure_payload -compress) -replace '"', '\"'
+    $configurePayload = (ConvertTo-Json $homeassistant_auto_configure_payload -compress) -replace '"', '""'
     $mqttClient.publish($homeassistant_auto_configure_topic, '\"\"')
     $mqttClient.publish($homeassistant_auto_configure_topic, $configurePayload)
 }
