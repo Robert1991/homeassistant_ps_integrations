@@ -2,14 +2,14 @@
 	"homeassistant_host" : "homeassistant",
 	"homeassistant_auto_discovery_prefix" : "homeassistant",
 	
-	"mqtt_login" : "fooUser",
-	"mqtt_password" : "fooPassword",
+	"mqtt_login" : "espUser",
+	"mqtt_password" : "esp123",
 	
 	"sensor" : {
-		"unique_id" : "foo_unique_id",
+		"unique_id" : "ta6Qv7",
 		"object_name" : "private_laptop_activity",
 		"homeassistant_component" : "binary_sensor",
 		"device_class" : "motion",
-		"device_id" : "foo_device_unique_id"
+		"device_id" : "4cgDJu"
 	}
 }
