@@ -36,7 +36,7 @@ function RegisterDevice {
         device       = $device_info
         off_delay    = 10
     }
-    $configurePayload = (ConvertTo-Json $homeassistant_auto_configure_payload -compress) -replace '"', '\"'
+    $configurePayload = (ConvertTo-Json $homeassistant_auto_configure_payload -compress) -replace '"', '"""'
     Write-Host "Registering $homeassistant_auto_configure_topic"
     $mqttClient = [MQTTClient]::new()
     $mqttClient.mqttHost = $configuration.homeassistant_host
