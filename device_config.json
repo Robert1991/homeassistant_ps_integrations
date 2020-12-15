@@ -1,0 +1,15 @@
+{
+	"homeassistant_host" : "homeassistant",
+	"homeassistant_auto_discovery_prefix" : "homeassistant",
+	
+	"mqtt_login" : "fooUser",
+	"mqtt_password" : "fooPassword",
+	
+	"sensor" : {
+		"unique_id" : "foo_unique_id",
+		"object_name" : "private_laptop_activity",
+		"homeassistant_component" : "binary_sensor",
+		"device_class" : "motion",
+		"device_id" : "foo_device_unique_id"
+	}
+}

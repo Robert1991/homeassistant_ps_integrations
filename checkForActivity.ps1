@@ -1,24 +1,16 @@
-param([switch]$register)
+param($deviceConfigPath = ".\device_config.json")
 
-$homeassistant_host = "homeassistant"
-
-$homeassistantAutoDiscoveryPrefix = "homeassistant"
-$homeassistantComponent = "binary_sensor"
-$homeassistantObjectId = "private_laptop_activity"
-$device_class = "motion"
-$sensorUniqueId = "ta6Qv7"
-$state_topic = "$homeassistantAutoDiscoveryPrefix/$homeassistantComponent/$homeassistantObjectId/state"
-$deviceId = "4cgDJu"
-$signatures = @'
-[DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)] 
-public static extern short GetAsyncKeyState(int virtualKeyCode); 
-'@
-$API = Add-Type -MemberDefinition $signatures -Name 'Win32' -Namespace API -PassThru
+. .\mqttClient.ps1
 
 # for full keylogger example look here https://gist.github.com/dasgoll/7ca1c059dd3b3fbc7277
 function CheckForKeyboardActivity {
-    param ($API, $iterations = 25, $timeoutInMillis = 50)
-    
+    param ($API, $iterations = 4, $timeoutInMillis = 25)
+    $signatures = @'
+    [DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)] 
+    public static extern short GetAsyncKeyState(int virtualKeyCode); 
+'@
+    $API = Add-Type -MemberDefinition $signatures -Name 'Win32' -Namespace API -PassThru
+
     for ($iteration = 1; $iteration -le $iterations; $iteration++) {
         Start-Sleep -Milliseconds $timeoutInMillis
         for ($ascii = 9; $ascii -le 254; $ascii++) {
@@ -31,81 +23,49 @@ function CheckForKeyboardActivity {
     }
     return $false;
 }
+function CheckForMouseMovement {
+    param ($timeout = 100, $iterations = 4)
 
-class MQTTClient {
-    [string]$mqttHost
-    [string]$user
-    [string]$password
-
-    [void] publish([string]$topic, [string]$payload) {
-        mqtt-cli.exe  pub -t $topic, -m $payload -h $this.mqttHost -u $this.user -pw $this.password
+    Add-Type -AssemblyName System.Windows.Forms
+    for ($iteration = 1; $iteration -le $iterations; $iteration++) {
+        $p1 = [System.Windows.Forms.Cursor]::Position
+        Start-Sleep -Milliseconds $timeout
+        $p2 = [System.Windows.Forms.Cursor]::Position
+        if ($p1.X -ne $p2.X -or $p1.Y -ne $p2.Y) {
+            return $true
+        }
     }
-
-    [void] publish([string]$topic, [boolean]$payload) {
-        mqtt-cli.exe  pub -t $topic, -m $payload -h $this.mqttHost -u $this.user -pw $this.password
-    }
+    return $false
 }
 
-function ReadRelevantSystemInfo {
-    return Get-ComputerInfo CsManufacturer, CsDNSHostName, OsVersion, CsModel;
-}
-
-function CreateDeviceInfo {
-    param ([parameter(Mandatory = $true)]$deviceUniqueId)
-    $systemInfo = ReadRelevantSystemInfo;  
-    return [pscustomobject]@{
-        ids          = @($deviceUniqueId)
-        manufacturer = $systemInfo.CsManufacturer
-        model        = $systemInfo.CsModel
-        name         = $systemInfo.CsDNSHostName
-        sw_version   = $systemInfo.OsVersion
-    }
-}
+$configuration = Get-Content -Raw -Path $deviceConfigPath | ConvertFrom-Json
+$homeassistant_activity_sensor_path = "{0}/{1}/{2}" -f $configuration.homeassistant_auto_discovery_prefix, `
+    $configuration.sensor.homeassistant_component, `
+    $configuration.sensor.object_name 
 
 $mqttClient = [MQTTClient]::new()
-$mqttClient.mqttHost = $homeassistant_host
-$mqttClient.user = "espUser"
-$mqttClient.password = "esp123"
+$mqttClient.mqttHost = $configuration.homeassistant_host
+$mqttClient.user = $configuration.mqtt_login
+$mqttClient.password = $configuration.mqtt_password
 
-if ($register) {
-    $device_info = CreateDeviceInfo $deviceId
+$state_topic = "$homeassistant_activity_sensor_path/state"
 
-    $homeassistant_auto_configure_topic = "$homeassistantAutoDiscoveryPrefix/$homeassistantComponent/$homeassistantObjectId/config"
-    $homeassistant_auto_configure_payload = [pscustomobject]@{
-        unique_id    = $sensorUniqueId
-        name         = $homeassistantObjectId
-        state_topic  = $state_topic
-        device_class = $device_class
-        device       = $device_info
-        off_delay    = 10
+while ($true) {
+    $checkForMouseMovementJob = start-job -ScriptBlock ${function:CheckForMouseMovement}
+    $checkKeyBoardActivityJob = start-job -ScriptBlock ${function:CheckForKeyboardActivity}
+        
+    while ("Completed" -ne $checkForMouseMovementJob.State -or "Completed" -ne $checkKeyBoardActivityJob.State) {
+        Write-Host "Wait"
+        Start-Sleep -Milliseconds 50
     }
-    $configurePayload = (ConvertTo-Json $homeassistant_auto_configure_payload -compress) -replace '"', '\"'
-    $mqttClient.publish($homeassistant_auto_configure_topic, '\"\"')
-    $mqttClient.publish($homeassistant_auto_configure_topic, $configurePayload)
-}
-else {
-    Add-Type -AssemblyName System.Windows.Forms
+    Write-host "IterationEnd"
+    Start-Sleep -Milliseconds 10
+    $mouseMoved = $checkForMouseMovementJob | Receive-Job -Keep
+    $keyStrokeDetected = $checkKeyBoardActivityJob | Receive-Job -Keep
 
-    while ($true) {
-        $p1 = [System.Windows.Forms.Cursor]::Position
+    if ($mouseMoved -or $keyStrokeDetected) {
+        "Activity detected"
+        $mqttClient.publish($state_topic, 'ON')
         Start-Sleep -Milliseconds 100
-        $p2 = [System.Windows.Forms.Cursor]::Position
-
-        $mouseMoved = $true
-        if ($p1.X -eq $p2.X -and $p1.Y -eq $p2.Y) {
-            $mouseMoved = $false
-        }
-
-        if (-not $mouseMoved) {
-            $keyStrokeDetected = CheckForKeyboardActivity $API
-        }
-    
-        if ($mouseMoved -or $keyStrokeDetected) {
-            $mqttClient.publish($state_topic, 'ON')
-            "Activity detected"
-            Start-Sleep -seconds 2
-        }
     }
 }
-
-
