@@ -24,7 +24,7 @@ function CheckForKeyboardActivity {
     return $false;
 }
 function CheckForMouseMovement {
-    param ($timeout = 100, $iterations = 4)
+    param ($timeout = 50, $iterations = 4)
 
     Add-Type -AssemblyName System.Windows.Forms
     for ($iteration = 1; $iteration -le $iterations; $iteration++) {
@@ -36,6 +36,15 @@ function CheckForMouseMovement {
         }
     }
     return $false
+}
+
+function ReportActivity {
+    param (
+        [string]$state_topic
+    )
+    Write-Host "publishing: $state_topic"
+    $return = $input.publish($state_topic, 'ON')
+    Write-Host "some return: $return"
 }
 
 $configuration = Get-Content -Raw -Path $deviceConfigPath | ConvertFrom-Json
@@ -50,22 +59,42 @@ $mqttClient.password = $configuration.mqtt_password
 
 $state_topic = "$homeassistant_activity_sensor_path/state"
 
+$activityDetectedInLastIteration = $false
 while ($true) {
     $checkForMouseMovementJob = start-job -ScriptBlock ${function:CheckForMouseMovement}
     $checkKeyBoardActivityJob = start-job -ScriptBlock ${function:CheckForKeyboardActivity}
         
-    while ("Completed" -ne $checkForMouseMovementJob.State -or "Completed" -ne $checkKeyBoardActivityJob.State) {
-        Write-Host "Wait"
+    try {
+        while ("Running" -eq $checkForMouseMovementJob.State -and "Running" -eq $checkKeyBoardActivityJob.State) {
+            Write-Host "Wait"
+            Start-Sleep -Milliseconds 100
+        }
+        
         Start-Sleep -Milliseconds 50
-    }
-    Write-host "IterationEnd"
-    Start-Sleep -Milliseconds 10
-    $mouseMoved = $checkForMouseMovementJob | Receive-Job -Keep
-    $keyStrokeDetected = $checkKeyBoardActivityJob | Receive-Job -Keep
+        Write-host "IterationEnd"
 
-    if ($mouseMoved -or $keyStrokeDetected) {
-        "Activity detected"
-        $mqttClient.publish($state_topic, 'ON')
-        Start-Sleep -Milliseconds 100
+        $mouseMoved = $checkForMouseMovementJob | Receive-Job -Wait 
+        $keyStrokeDetected = $checkKeyBoardActivityJob | Receive-Job -Wait 
+
+        if (($mouseMoved -or $keyStrokeDetected) -and -not $activityDetectedInLastIteration) {
+            $activityDetectedInLastIteration = $true
+            Write-Host "Reporting activity"
+            $mqttClient.publishAsync($state_topic, 'ON')
+        } else {
+            $activityDetectedInLastIteration = $false
+        }
+    } catch {
+        write-host "Error occured: `r`n $_.Exception.Message"
+    } finally {
+        $checkForMouseMovementJob | Remove-Job -Force -ErrorAction SilentlyContinue
+        $checkKeyBoardActivityJob | Remove-Job -Force -ErrorAction SilentlyContinue
+
+        Write-Host "Current Jobs"
+        Get-Job
+        Remove-Job -State Completed
+        Remove-Job -State Failed
+        Start-Sleep -Seconds 2
     }
 }
+
+return 1;
