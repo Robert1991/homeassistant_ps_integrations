@@ -73,19 +73,24 @@ while ($true) {
         Start-Sleep -Milliseconds 50
         Write-host "IterationEnd"
 
-        $mouseMoved = $checkForMouseMovementJob | Receive-Job -Wait 
-        $keyStrokeDetected = $checkKeyBoardActivityJob | Receive-Job -Wait 
+        $moveMovedJobObject = $checkForMouseMovementJob | Wait-Job -Timeout 5
+        $mouseMoved = $moveMovedJobObject | Receive-Job
+        $checkKeyBoardActivityJobObject = $checkKeyBoardActivityJob | Wait-Job -Timeout 5
+        $keyStrokeDetected = $checkKeyBoardActivityJobObject | Receive-Job
 
         if (($mouseMoved -or $keyStrokeDetected) -and -not $activityDetectedInLastIteration) {
             $activityDetectedInLastIteration = $true
             Write-Host "Reporting activity"
             $mqttClient.publishAsync($state_topic, 'ON')
-        } else {
+        }
+        else {
             $activityDetectedInLastIteration = $false
         }
-    } catch {
+    }
+    catch {
         write-host "Error occured: `r`n $_.Exception.Message"
-    } finally {
+    }
+    finally {
         $checkForMouseMovementJob | Remove-Job -Force -ErrorAction SilentlyContinue
         $checkKeyBoardActivityJob | Remove-Job -Force -ErrorAction SilentlyContinue
 
