@@ -51,12 +51,13 @@ $configuration = Get-Content -Raw -Path $deviceConfigPath | ConvertFrom-Json
 RegisterDevice $configuration $mqttClient
 
 function SubscribeTopicSerivce {
-    param ($topic)
-    $subscribeHS = "mqtt-cli sub -h {0} -u {1} -pw {2} -t ""{3}""" -f "homeassistant", "espUser", "esp123", $topic
+    param ($hostname, $user, $password, $topic)
+    $subscribeHS = "mqtt-cli sub -h {0} -u {1} -pw {2} -t ""{3}""" -f $hostname, $user, $password, $topic
+    Write-Host $subscribeHS
     Invoke-Expression $subscribeHS
 }
 
-$restartListener = start-job -ScriptBlock ${function:SubscribeTopicSerivce} -ArgumentList "homeassistant/status"
+$restartListener = start-job -ScriptBlock ${function:SubscribeTopicSerivce} -ArgumentList $configuration.homeassistant_host,$configuration.mqtt_login,$configuration.mqtt_password,"homeassistant/status"
 try {
     while ($true) {
         $status = $restartListener | Receive-Job
@@ -70,8 +71,9 @@ try {
         }
         if ($restartListener.State -ne "Running") {
             $restartListener.Dispose()
-            $restartListener = start-job -ScriptBlock ${function:SubscribeTopicSerivce} -ArgumentList "homeassistant/status"
+            $restartListener = start-job -ScriptBlock ${function:SubscribeTopicSerivce} -ArgumentList $configuration.homeassistant_host,$configuration.mqtt_login,$configuration.mqtt_password,"homeassistant/status"
         }
+		Start-Sleep -Seconds 10
     }
 }
 finally {
