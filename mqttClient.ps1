@@ -2,27 +2,29 @@ class MQTTClient {
     [string]$mqttHost
     [string]$user
     [string]$password
-    [object]$currentJob
+    [object]$mqttClient
+
+    [void] connect() {
+        $this.mqttClient = [uPLibrary.Networking.M2Mqtt.MqttClient]($this.mqttHost)
+        $this.mqttClient.Connect([guid]::NewGuid(), $this.user, $this.password)
+    }
 
     [void] publish([string]$topic, [string]$payload) {
-        $clientCall = "mqtt-cli pub -h {0} -u {1} -pw {2} -t ""{3}"" -m '{4}'" -f $this.mqttHost, $this.user, $this.password, $topic, $payload
-        Invoke-Expression $clientCall
-    }
-
-    [void] publishAsync([string]$topic, [string]$payload) {
-        $clientCall = "mqtt-cli pub -h {0} -u {1} -pw {2} -t ""{3}"" -m '{4}'" -f $this.mqttHost, $this.user, $this.password, $topic, $payload
-        
-        if (!$this.currentJob -or $this.currentJob.State -ne "Running") {
-            $this.currentJob = Start-Job {
-                param ($clientCall)
-                Invoke-Expression $clientCall
-            } -ArgumentList $clientCall
-        } else {
-            Write-Host "Already reporting!"
+        if (!$this.mqttClient.IsConnected) {
+            $this.connect()
         }
+        $this.mqttClient.Publish($topic, [System.Text.Encoding]::UTF8.GetBytes($payload))
     }
 
-    [void] publish([string]$topic, [boolean]$payload) {
-        mqtt-cli.exe  pub -t $topic, -m $payload -h $this.mqttHost -u $this.user -pw $this.password
+    [object] registerReceiveFunction([object]$receivedFunction) {
+        $eventRegistration = Register-ObjectEvent -inputObject $this.mqttClient -EventName "MqttMsgPublishReceived" -Action $receivedFunction
+        return $eventRegistration
+    }
+
+    [void] subscribe([string]$topic, [object]$receivedFunction) {
+        if (!$this.mqttClient.IsConnected) {
+            $this.connect()
+        }
+        $this.mqttClient.Subscribe($topic, 0)
     }
 }
