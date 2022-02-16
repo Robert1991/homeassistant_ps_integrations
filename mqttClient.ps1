@@ -17,11 +17,14 @@ class MQTTClient {
     }
 
     [object] registerReceiveFunction([object]$receivedFunction) {
+        if (!$this.mqttClient) {
+            $this.connect()
+        }
         $eventRegistration = Register-ObjectEvent -inputObject $this.mqttClient -EventName "MqttMsgPublishReceived" -Action $receivedFunction
         return $eventRegistration
     }
 
-    [void] subscribe([string]$topic, [object]$receivedFunction) {
+    [void] subscribe([string]$topic) {
         if (!$this.mqttClient.IsConnected) {
             $this.connect()
         }

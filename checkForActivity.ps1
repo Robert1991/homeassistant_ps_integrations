@@ -82,23 +82,19 @@ while ($true) {
             $activityDetectedInLastIteration = $true
             Write-Host "Reporting activity"
             $mqttClient.publishAsync($state_topic, 'ON')
-        }
-        else {
+        } else {
             $activityDetectedInLastIteration = $false
         }
-    }
-    catch {
+    } catch {
         write-host "Error occured: `r`n $_.Exception.Message"
-    }
-    finally {
-        $checkForMouseMovementJob | Remove-Job -Force -ErrorAction SilentlyContinue
-        $checkKeyBoardActivityJob | Remove-Job -Force -ErrorAction SilentlyContinue
+    } finally {
+        $checkForMouseMovementJob | Remove-Job -ErrorAction SilentlyContinue
+        $checkKeyBoardActivityJob | Remove-Job -ErrorAction SilentlyContinue
 
         Write-Host "Current Jobs"
-        Get-Job
-        Remove-Job -State Completed
-        Remove-Job -State Failed
-        Start-Sleep -Seconds 2
+        Get-Job -ErrorAction SilentlyContinue
+        Remove-Job -State Completed -ErrorAction SilentlyContinue
+        Remove-Job -State Failed -ErrorAction SilentlyContinue
     }
 }
 
