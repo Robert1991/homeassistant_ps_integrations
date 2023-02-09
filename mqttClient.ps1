@@ -16,11 +16,11 @@ class MQTTClient {
         $this.mqttClient.Publish($topic, [System.Text.Encoding]::UTF8.GetBytes($payload))
     }
 
-    [object] registerReceiveFunction([object]$receivedFunction) {
+    [object] registerReceiveFunction([object]$receivedFunction, [object]$messageData) {
         if (!$this.mqttClient) {
             $this.connect()
         }
-        $eventRegistration = Register-ObjectEvent -inputObject $this.mqttClient -EventName "MqttMsgPublishReceived" -Action $receivedFunction
+        $eventRegistration = Register-ObjectEvent -inputObject $this.mqttClient -EventName "MqttMsgPublishReceived" -Action $receivedFunction -MessageData $messageData
         return $eventRegistration
     }
 
